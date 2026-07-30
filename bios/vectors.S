@@ -25,6 +25,9 @@
         .globl  _check_read_byte
 #endif
         .globl  _int_vbl
+#if CONF_WITH_DDRAIGVGA_CONSOLE || CONF_WITH_DDRAIGVGA_DESKTOP
+        .globl  _ddraig_vbl
+#endif
 #if CONF_WITH_ATARI_VIDEO
         .globl  _int_hbl
 #endif
@@ -332,6 +335,23 @@ is_ipl:
  */
 
 _int_vbl:
+        jbsr    vbl_common
+
+#if CONF_WITH_ATARI_VIDEO || CONF_WITH_VBL_RTE
+        rte
+#else
+        rts
+#endif
+
+#if CONF_WITH_DDRAIGVGA_CONSOLE || CONF_WITH_DDRAIGVGA_DESKTOP
+_ddraig_vbl:
+        jbsr    vbl_common
+        # Clear the gfxvga VBL interrupt (write status register)
+        move.w  #4,0xf7f500
+        rte
+#endif
+
+vbl_common:
         addq.l  #1, _frclock.w          // increase num of happened ints
 #ifdef __mcoldfire__
         move.l  d0, -(sp)               // ColdFire specific
@@ -494,11 +514,7 @@ vbl_end:
         addq.w  #1,_vblsem.w
 #endif
 
-#if CONF_WITH_ATARI_VIDEO || CONF_WITH_VBL_RTE
-        rte
-#else
         rts
-#endif
 
 // ==== Timer C interrupt handler ============================================
 
@@ -816,7 +832,11 @@ _duart_interrupt:
         movem.l d0-d1/a0-a1,-(sp)
 #endif
         lea     DUART_BASE, a0
+ #if defined(MACHINE_DDRAIG68K)
+        move.b  10(a0), d0            // grab the Interrupt Status Register
+ #else
         move.b  11(a0), d0            // grab the Interrupt Status Register
+ #endif
  #if CONF_DUART_TIMER_C
         btst.b  #3, d0                // Is Counter Ready (bit 3) set?
         beq     duart_check_rx_2      //    No, skip timer handling code
@@ -837,10 +857,18 @@ _duart_short_frame:
 duart_check_rx:
         lea     DUART_BASE, a0
  #if CONF_DUART_TIMER_C
+ #if defined(MACHINE_DDRAIG68K)
+        tst.b   0x1e(a0)              // Send stop counter to ack timer interrupt. Does not actually stop since in timer mode.
+ #else
         tst.b   0x1f(a0)              // Send stop counter to ack timer interrupt. Does not actually stop since in timer mode.
  #endif
+ #endif
 duart_check_rx_2:
+#if defined(MACHINE_DDRAIG68K)
+        move.b  10(a0), d0            // Get the ISR again
+#else
         move.b  11(a0), d0            // Get the ISR again
+#endif
         btst.b  #1, d0                // Is the Chan A Receive Ready (bit 1) set?
 #ifndef CONF_WITH_DUART_CHANNEL_B
         beq     duart_intr_done       //    No, skip serial handling code
@@ -850,7 +878,11 @@ duart_check_rx_2:
         jbsr    _duart_rs232_interrupt_handler_channel_a
 duart_check_channel_b:
         lea     DUART_BASE, a0
+#if defined(MACHINE_DDRAIG68K)
+        move.b  10(a0), d0            // Get the ISR again
+#else
         move.b  11(a0), d0            // Get the ISR again
+#endif
         btst.b  #5, d0                // Is the Chan B Receive Ready (bit 5) set?
         beq     duart_intr_done
 #if CONF_WITH_IKBD_DUART

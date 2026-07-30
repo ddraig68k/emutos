@@ -37,6 +37,9 @@
 #include "gemdosif.h"
 
 #include "asm.h"
+#if CONF_WITH_VT82C42
+#include "vt82c42.h"
+#endif
 
 #define KEYMASK 0xffff0000L             /* for comparing data to KEYSTOP */
 #define KEYSTOP 0x2b1c0000L             /* control-backslash */
@@ -161,6 +164,10 @@ void chkkbd(void)
 
     if (gl_play)
         return;
+
+#if CONF_WITH_VT82C42
+    vt82c42_poll_mouse();
+#endif
 
     kstat = gsx_kstate();
     achar = 0;

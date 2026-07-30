@@ -28,6 +28,9 @@ void init_acia_vecs(void);
 void int_hbl(void);
 #endif
 void int_vbl(void);
+#if CONF_WITH_DDRAIGVGA_CONSOLE || CONF_WITH_DDRAIGVGA_DESKTOP
+void ddraig_vbl(void);
+#endif
 void int_linea(void);
 void int_timerc(void);
 
@@ -43,6 +46,7 @@ long check_read_byte(long);
 #if CONF_WITH_DUART
 void duart_interrupt(void);
 #endif
+
 
 /* */
 LONG default_etv_critic(WORD err,WORD dev);

@@ -13,7 +13,7 @@
  * option any later version.  See doc/license.txt for details.
  */
 
-/*#define ENABLE_KDEBUG*/
+/* #define ENABLE_KDEBUG */
 
 #include "emutos.h"
 #include "machine.h"
@@ -42,6 +42,7 @@
 #include "lisa.h"
 #include "nova.h"
 #include "xosera.h"
+#include "ddraig_vga.h"
 
 void detect_monitor_change(void);
 static void setphys(const UBYTE *addr);
@@ -417,6 +418,21 @@ WORD check_moderez(WORD moderez)
     return amiga_check_moderez(moderez);
 #endif
 
+#if CONF_WITH_DDRAIGVGA_DESKTOP
+    {
+        WORD rez;
+
+        if (moderez > 0)                /* ignore Falcon mode values */
+            return 0;
+
+        rez = moderez & 0x00ff;
+        if (!ddraigvga_rez_supported(rez))
+            return 0;
+
+        return (rez == getrez()) ? 0 : (0xff00 | rez);
+    }
+#endif
+
 #if CONF_WITH_VIDEL
     if (has_videl)
         return videl_check_moderez(moderez);
@@ -633,6 +649,14 @@ void screen_init_mode(void)
     xosera_screen_init();
 #endif
 
+#if CONF_WITH_DDRAIGVGA_CONSOLE || CONF_WITH_DDRAIGVGA_DESKTOP
+    KDEBUG(("DdraigVGA console init\n"));
+    VEC_LEVEL1 = ddraig_vbl;
+    vblsem = 0;
+    ddraigvga_screen_init();
+#endif
+
+
 #ifdef MACHINE_LISA
     lisa_screen_init();
 #endif
@@ -642,7 +666,7 @@ void screen_init_mode(void)
     vblsem = 0;
 #endif
 
-#if CONF_SERIAL_CONSOLE
+#if CONF_SERIAL_CONSOLE && !CONF_WITH_DDRAIGVGA_DESKTOP
     /* Set the video mode to programs think they're running in an 80-column mode. */
     sshiftmod = ST_HIGH;
     /* Prevent resolution changes. */
@@ -704,6 +728,10 @@ int rez_changeable(void)
         return FALSE;
 
 #ifdef MACHINE_AMIGA
+    return TRUE;
+#endif
+
+#if CONF_WITH_DDRAIGVGA_DESKTOP
     return TRUE;
 #endif
 
@@ -829,6 +857,12 @@ void screen_get_current_mode_info(UWORD *planes, UWORD *hz_rez, UWORD *vt_rez)
     *planes = 1;
     *hz_rez = 640;
     *vt_rez = 240;
+#elif CONF_WITH_DDRAIGVGA_DESKTOP
+    ddraigvga_get_current_mode_info(planes, hz_rez, vt_rez);
+#elif CONF_WITH_DDRAIGVGA_CONSOLE
+    *planes = 1;
+    *hz_rez = 640;
+    *vt_rez = 480;
 #else
     atari_get_current_mode_info(planes, hz_rez, vt_rez);
 #endif
@@ -856,6 +890,11 @@ WORD get_palette(void)
             return 4096;
         return 0;
     }
+#endif
+
+#if CONF_WITH_DDRAIGVGA_DESKTOP
+    /* the Ddraig mode set doesn't map onto Atari sshiftmod values */
+    return (v_planes == 1) ? 2 : 4096;
 #endif
 
     palette = 4096;         /* for STe/TT colour modes */
@@ -1161,6 +1200,8 @@ WORD setscreen(UBYTE *logLoc, const UBYTE *physLoc, WORD rez, WORD videlmode)
 
 #ifdef MACHINE_AMIGA
     amiga_setrez(rez, videlmode);
+#elif CONF_WITH_DDRAIGVGA_DESKTOP
+    ddraigvga_setrez(rez);
 #elif CONF_WITH_ATARI_VIDEO
     atari_setrez(rez, videlmode);
 #endif
@@ -1189,8 +1230,13 @@ void setpalette(const UWORD *palettePtr)
     }
     KDEBUG((")\n"));
 #endif
+#if CONF_WITH_DDRAIGVGA_DESKTOP
+    /* no VBL palette processing on this hardware: set it directly */
+    ddraigvga_setpalette(palettePtr);
+#else
     /* next VBL will do this */
     colorptr = palettePtr;
+#endif
 }
 
 /*
@@ -1204,6 +1250,8 @@ WORD setcolor(WORD colorNum, WORD color)
 {
 #ifdef MACHINE_AMIGA
     return amiga_setcolor(colorNum, color);
+#elif CONF_WITH_DDRAIGVGA_DESKTOP
+    return ddraigvga_setcolor(colorNum, color);
 #elif CONF_WITH_ATARI_VIDEO
     return atari_setcolor(colorNum, color);
 #else

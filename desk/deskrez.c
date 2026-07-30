@@ -84,6 +84,46 @@ static const WORD falconmode_from_button[] =        /*     VGA           RGB    
 
 #endif /* CONF_WITH_VIDEL */
 
+#if CONF_WITH_DDRAIGVGA_DESKTOP
+#include "ddraig_vga.h"
+
+/*
+ *  change_ddraig_rez(): change DdraigVGA desktop mode
+ *
+ *  two-step selection: colour depth first, then resolution.  choosing
+ *  the current mode again acts like a cancel.
+ *  returns:    0   user cancelled change
+ *              1   user wants to change; newres is updated with new resolution.
+ */
+static int change_ddraig_rez(WORD *newres)
+{
+    /* NOTE: widescreen test branch - 1280x720 replaces 1024x768 in the mono menu */
+    static const WORD mono_rez[] = { ST_HIGH, DDRAIG_REZ_800_MONO, TT_HIGH };
+    static const WORD col_rez[] = { ST_LOW, TT_MEDIUM, DDRAIG_REZ_800_COL };
+    WORD sel, rez;
+
+    sel = form_alert(3, "[2][ Select colour depth ][Mono|16 colour|Cancel]");
+    if (sel == 1)
+    {
+        sel = form_alert(1, "[1][ Select resolution ][640x480|800x600|1280x720]");
+        rez = mono_rez[sel-1];
+    }
+    else if (sel == 2)
+    {
+        sel = form_alert(1, "[1][ Select resolution ][320x240|640x480|800x600]");
+        rez = col_rez[sel-1];
+    }
+    else
+        return 0;
+
+    if (rez == Getrez())        /* re-picking the current mode: no change */
+        return 0;
+
+    *newres = rez;
+    return 1;
+}
+#endif /* CONF_WITH_DDRAIGVGA_DESKTOP */
+
 /*
  *  change_st_rez(): change desktop ST resolution
  *  returns:    0   user cancelled change
@@ -317,6 +357,11 @@ int change_resolution(WORD *newres,WORD *newmode)
 {
 #ifdef MACHINE_AMIGA
     return change_amiga_rez(newres,newmode);
+#endif
+
+#if CONF_WITH_DDRAIGVGA_DESKTOP
+    *newmode = 0;
+    return change_ddraig_rez(newres);
 #endif
 
 #if CONF_WITH_VIDEL

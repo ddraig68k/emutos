@@ -455,6 +455,11 @@ kbdindex:
 kbdbuf: .ds.b   8   // buffer where packets are being reconstructed
 joybuf: .ds.b   3
 
+        .even
+        .globl  _ikbd_reset_drops
+_ikbd_reset_drops:
+        .ds.l   1   // packets dropped by the in_packet corruption guard
+
         .text
 
 _kbdvec:
@@ -542,7 +547,16 @@ ikbdraw:
         cmp.w   #0xf6,d0        // is byte a packet header?
         jcc     begin_packet    // byte >= 0xf6 => go begin receiving a packet
         lea     _ikbdiorec,a0   // set args for kbdvec: a0->iorec (d0=ikbd byte)
-        move.l  kbdvec,-(sp)    // push vector onto stack
+        move.l  kbdvec,d1       // get kbdvec target
+        tst.l   d1              // reject null vector
+        jeq     kbdvec_default
+        btst    #0,d1           // reject odd vector (would trigger address error)
+        jeq     kbdvec_ready
+kbdvec_default:
+        move.l  #_kbdvec,d1
+        move.l  d1,kbdvec
+kbdvec_ready:
+        move.l  d1,-(sp)        // push vector onto stack
         rts                     // and go there (stack is clean, no need to jsr)
 
 begin_packet:
@@ -573,6 +587,8 @@ in_packet:
         moveq   #0,d1
 #endif
         move.w  kbdindex,d1
+        cmp.w   #8-1,d1         // past the end of kbdbuf means the state
+        jhi     in_packet_reset // machine is corrupt: drop the packet
         lea     kbdbuf,a0
 #ifdef __mcoldfire__
         move.b  d0,0(a0,d1.l)
@@ -591,6 +607,11 @@ in_packet:
         jeq     got_packet
         addq.w  #1,kbdindex
 #endif
+        rts
+
+in_packet_reset:
+        addq.l  #1,_ikbd_reset_drops
+        clr.b   ikbdstate
         rts
 
 // now I've got a full packet in buffer kbdbuf, and d0.b is the last byte received
@@ -685,7 +706,7 @@ _call_mousevec:
 #endif
         rts
 
-#if CONF_WITH_FLEXCAN || CONF_SERIAL_IKBD || defined(MACHINE_LISA)
+#if CONF_WITH_FLEXCAN || CONF_SERIAL_IKBD || defined(MACHINE_LISA)  || defined(MACHINE_DDRAIG68K)
 
 /******************************************************************************/
 /* Call ikbdraw from C                                                        */
